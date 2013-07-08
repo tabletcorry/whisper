@@ -25,7 +25,43 @@
 #		Archive = Point+
 #			Point = timestamp,value
 
-import os, struct, time, operator, itertools
+import os
+import struct
+import time
+import operator
+import itertools
+
+from janus import janus_open
+
+
+def enableJanus():
+    global open
+    open = janus_open
+
+class Time(object):
+    current_value = 1372567363.73511
+    original_value = 1372567363.73511
+    @staticmethod
+    def time():
+        return Time.current_value
+
+    @staticmethod
+    def advance():
+        Time.current_value += 1
+
+    @staticmethod
+    def reset():
+        Time.current_value = Time.original_value
+
+def enableTimeOverride():
+    global time
+
+    time = Time
+
+def setAutoFlush(autoflush):
+    global AUTOFLUSH
+    AUTOFLUSH = autoflush
+
 
 try:
   import fcntl
@@ -535,7 +571,8 @@ timestamp is either an int or float
     return file_update(fh, value, timestamp)
   finally:
     if fh:
-      fh.close()
+      if not __debug__:
+          fh.close()
 
 def file_update(fh, value, timestamp):
   if LOCK:
@@ -745,7 +782,8 @@ Returns None if no data can be returned
     return file_fetch(fh, fromTime, untilTime)
   finally:
     if fh:
-      fh.close()
+      if not __debug__:
+        fh.close()
 
 def file_fetch(fh, fromTime, untilTime):
   header = __readHeader(fh)

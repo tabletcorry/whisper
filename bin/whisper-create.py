@@ -52,5 +52,5 @@ try:
 except whisper.WhisperException, exc:
   raise SystemExit('[ERROR] %s' % str(exc))
 
-size = os.stat(path).st_size
-print 'Created: %s (%d bytes)' % (path,size)
+#size = os.stat(path).st_size
+#print 'Created: %s (%d bytes)' % (path,size)

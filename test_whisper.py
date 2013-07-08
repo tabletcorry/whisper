@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+import glob
 
 import os
 import time
 import random
 import struct
+from janus import janus_create
 
 try:
     import unittest2 as unittest
@@ -21,16 +23,23 @@ class TestWhisper(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        global time
+        whisper.enableTimeOverride()
+        time = whisper.Time
         cls._removedb()
 
     @classmethod
-    def _removedb(cls):
+    def _removedb(cls, path=None):
         """Remove the whisper database file"""
         try:
-            if os.path.exists(cls.db):
-                os.unlink(cls.db)
+            if os.path.exists(path or cls.db):
+                os.unlink(path or cls.db)
         except (IOError, OSError):
             pass
+
+    @classmethod
+    def _createdb(cls, path, retentions):
+        whisper.create(path, retentions)
 
     def test_validate_archive_list(self):
         """blank archive config"""
@@ -82,14 +91,14 @@ class TestWhisper(unittest.TestCase):
 
         # check if invalid configuration fails successfully
         with self.assertRaises(whisper.InvalidConfiguration):
-            whisper.create(self.db, [])
+            self._createdb(self.db, [])
 
         # create a new db with a valid configuration
-        whisper.create(self.db, retention)
+        self._createdb(self.db, retention)
 
         # attempt to create another db in the same file, this should fail
         with self.assertRaises(whisper.InvalidConfiguration):
-            whisper.create(self.db, 0)
+            self._createdb(self.db, 0)
 
         info = whisper.info(self.db)
 
@@ -116,11 +125,7 @@ class TestWhisper(unittest.TestCase):
         """test merging two databases"""
         testdb = "test-%s" % self.db
         self._removedb()
-
-        try:
-          os.unlink(testdb)
-        except Exception:
-          pass
+        self._removedb(path=testdb)
 
         # Create 2 whisper databases and merge one into the other
         self._update()
@@ -129,10 +134,7 @@ class TestWhisper(unittest.TestCase):
         whisper.merge(self.db, testdb)
 
         self._removedb()
-        try:
-          os.unlink(testdb)
-        except Exception:
-          pass
+        self._removedb(path=testdb)
 
     def test_fetch(self):
         """fetch info from database """
@@ -143,7 +145,7 @@ class TestWhisper(unittest.TestCase):
 
         # SECOND MINUTE HOUR DAY
         retention = [(1, 60), (60, 60), (3600, 24), (86400, 365)]
-        whisper.create(self.db, retention)
+        self._createdb(self.db, retention)
 
         # check a db with an invalid time range
         with self.assertRaises(whisper.InvalidTimeInterval):
@@ -163,25 +165,32 @@ class TestWhisper(unittest.TestCase):
 
         self._removedb()
 
-    def _update(self, wsp=None, schema=None):
+    def _update(self, wsp=None, schema=None, num_data_points=None):
         wsp = wsp or self.db
         schema = schema or [(1, 20)]
-        num_data_points = 20
+        num_data_points = num_data_points or 20
 
-        whisper.create(wsp, schema)
-
-        # create sample data
-        tn = time.time() - num_data_points
-        data = []
-        for i in range(num_data_points):
-            data.append((tn + 1 + i, random.random() * 10))
+        self._createdb(wsp, schema)
 
         # test single update
-        whisper.update(wsp, data[0][1], data[0][0])
+        data = []
+        for i in range(num_data_points):
+            timestamp = time.time()
+            value = random.random() * 10
+            data.append((timestamp, value))
+            whisper.update(wsp, value, timestamp)
+            time.advance()
+
 
         # test multi update
-        whisper.update_many(wsp, data[1:])
+        # TODO Create distinct test for update_many
+        #whisper.update_many(wsp, data[1:])
         return data
+
+    def test_update_single_autoflush(self):
+        whisper.setAutoFlush(True)
+        self.test_update_single_archive()
+        whisper.setAutoFlush(False)
 
     def test_update_single_archive(self):
         """Update with a single leveled archive"""
@@ -191,7 +200,7 @@ class TestWhisper(unittest.TestCase):
         fetch = whisper.fetch(self.db, 0)   # all data
         fetch_data = fetch[1]
 
-        for i, (timestamp, value) in enumerate(data):
+        for i, (timestamp, value) in enumerate(data[1:]):
             # is value in the fetched data?
             self.assertEqual(value, fetch_data[i])
 
@@ -205,13 +214,31 @@ class TestWhisper(unittest.TestCase):
                            time.time() - retention_schema[0][1] - 1)
 
         self._removedb()
-        
+
+
+    def test_update_double_archive(self):
+        """Update with a two leveled archive"""
+        retention_schema = [(1, 20), (2, 20)]
+        data = self._update(schema=retention_schema, num_data_points=40)
+        # fetch the data
+        fetch = whisper.fetch(self.db, 0)   # all data
+        fetch_data = fetch[1]
+
+        start_index = 1
+
+        for i, ((t1, v1), (t2, v2)) in enumerate(zip(data[start_index:-1:2], data[start_index+1::2])):
+            average = (v1+v2)/2.0
+            # is value in the fetched data?
+            self.assertEqual(average, fetch_data[i])
+
+        self._removedb()
+
     def test_setAggregation(self):
         """Create a db, change aggregation, xFilesFactor, then use info() to validate"""
         retention = [(1, 60), (60, 60)]
 
         # create a new db with a valid configuration
-        whisper.create(self.db, retention)
+        self._createdb(self.db, retention)
 
         #set setting every AggregationMethod available
         for ag in whisper.aggregationMethods:
@@ -246,6 +273,39 @@ class TestWhisper(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._removedb()
+
+class TestWhisperJanus(TestWhisper):
+
+    @classmethod
+    def setUpClass(cls):
+        global time
+        whisper.enableJanus()
+        whisper.enableTimeOverride()
+        time = whisper.Time
+        cls._removedb()
+
+    @classmethod
+    def _removedb(cls, path=None):
+        """Remove the whisper database file"""
+        try:
+            for glob_file in glob.glob("{0}.janus*".format(path or cls.db)):
+                os.remove(glob_file)
+            if os.path.exists(path or cls.db):
+                os.unlink(path or cls.db)
+        except (IOError, OSError):
+            pass
+
+    @classmethod
+    def _createdb(cls, path, retentions):
+        whisper.create(path, retentions)
+        janus_create(path)
+
+    def test_update_single_autoflush(self):
+        # TODO: Modify whisper to allow Janus to flush
+        # The issue is that whisper flushes the file handle (which Janus can do
+        # the work for), then accesses the fileno and executes the fsync. Since
+        # it runs on a single fileno, Janus has no reasonable value to return.
+        return
 
 if __name__ == '__main__':
     unittest.main()
