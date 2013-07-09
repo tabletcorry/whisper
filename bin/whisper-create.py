@@ -32,6 +32,7 @@ option_parser.add_option('--aggregationMethod', default='average',
         type='string', help="Function to use when aggregating values (%s)" %
         ', '.join(whisper.aggregationMethods))
 option_parser.add_option('--overwrite', default=False, action='store_true')
+option_parser.add_option('--janus', default=False, action='store_true')
 
 (options, args) = option_parser.parse_args()
 
@@ -47,10 +48,17 @@ if os.path.exists(path) and options.overwrite:
     print 'Overwriting existing file: %s' % path
     os.unlink(path)
 
+if options.janus:
+    whisper.enableJanus()
+
 try:
   whisper.create(path, archives, xFilesFactor=options.xFilesFactor, aggregationMethod=options.aggregationMethod)
 except whisper.WhisperException, exc:
   raise SystemExit('[ERROR] %s' % str(exc))
+
+if options.janus:
+    import janus
+    janus.janus_create(path)
 
 #size = os.stat(path).st_size
 #print 'Created: %s (%d bytes)' % (path,size)

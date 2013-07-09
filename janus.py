@@ -1,20 +1,27 @@
 import json
 import os
 
+CONFIG_CACHE = False
+_configCache = {}
+
 def janus_open(name, mode='r', buffering=-1):
     janus_name = name + ".janus"
     if not os.path.exists(janus_name):
         return open(name, mode, buffering)
 
-    with open(janus_name, 'r') as janus_file:
-        janus_config = json.load(janus_file)
+    janus_config = _configCache.get(janus_name)
+    if janus_config is None:
+        with open(janus_name, 'r') as janus_file:
+            janus_config = json.load(janus_file)
+        if CONFIG_CACHE:
+            _configCache[janus_name] = janus_config
 
     version = janus_config['version']
     assert version == 1
 
     archive_files = []
-    for archive in janus_config['archives']:
-        archive_files.append(open(archive, 'r+b'))
+    for archive, size in janus_config['archives']:
+        archive_files.append((archive, size))
 
     return Janus(name, archive_files)
 
@@ -32,7 +39,7 @@ def janus_create(name):
         slice_name = "{0}.janus.{1}.{2}".format(name, "cold", 0)
         with open(slice_name, 'wb') as janus_slice:
             janus_slice.write(original.read(info['archives'][0]['offset']))
-            metadata['archives'].append(slice_name)
+            metadata['archives'].append((slice_name, info['archives'][0]['offset']))
 
         total_archives = len(info['archives'])
         for i, archive in enumerate(info['archives']):
@@ -44,7 +51,7 @@ def janus_create(name):
             with open(slice_name, 'wb') as janus_slice:
                 original.seek(archive['offset'])
                 janus_slice.write(original.read(archive['size']))
-            metadata['archives'].append(slice_name)
+            metadata['archives'].append((slice_name, archive['size']))
 
     os.remove(name)
     with open(name + ".janus", 'wb') as meta:
@@ -60,16 +67,15 @@ class Janus(object):
         :type archive_files: list
         """
         self.name = name
-        self.archive_files = archive_files
+        self.archive_files = map(lambda x: x[0], archive_files)
         self.virtual_position = 0
 
         self.current_file = self.archive_files[0]
         self.file_maxima = []
         total_offset = 0
-        for archive_file in self.archive_files:
-            archive_file_size = os.path.getsize(archive_file.name)
-            self.file_maxima.append(archive_file_size + total_offset)
-            total_offset += archive_file_size
+        for archive_file, size in archive_files:
+            self.file_maxima.append(size + total_offset)
+            total_offset += size
 
         self.current_min = 0
         self.current_max = self.file_maxima[0]
@@ -79,6 +85,8 @@ class Janus(object):
         if size < 0:
             # Whisper does not use negative reads
             raise NotImplementedError("Non-negative read sizes only")
+        if type(self.current_file) is unicode:
+            self.current_file = open(self.current_file, 'r+b')
         read_bytes = self.current_file.read(size)
         assert len(read_bytes) == size
         self.virtual_position += size
@@ -100,7 +108,10 @@ class Janus(object):
                 self.current_min = self.file_maxima[i - 1]
             self.current_max = maxima
             self.virtual_position = offset
-            self.current_file.seek(offset - self.current_min)
+            if offset - self.current_min != 0:
+                if type(self.current_file) is unicode:
+                    self.current_file = open(self.current_file, 'r+b')
+                self.current_file.seek(offset - self.current_min)
             break
         else:
             raise ValueError("Seek outside of all archives")
@@ -110,6 +121,8 @@ class Janus(object):
             if offset >= self.current_max or offset < self.current_min:
                 self._switch_file(offset)
             else:
+                if type(self.current_file) is unicode:
+                    self.current_file = open(self.current_file, 'r+b')
                 self.current_file.seek(offset - self.current_min)
                 self.virtual_position = offset
         elif whence == os.SEEK_CUR:
@@ -125,6 +138,8 @@ class Janus(object):
 
     def write(self, data):
         self.virtual_position += len(data)
+        if type(self.current_file) is unicode:
+            self.current_file = open(self.current_file, 'r+b')
         return self.current_file.write(data)
 
     def flush(self):
@@ -133,4 +148,5 @@ class Janus(object):
 
     def close(self):
         for archive in self.archive_files:
-            archive.close()
+            if type(archive) is file:
+                archive.close()

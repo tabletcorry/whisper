@@ -26,12 +26,16 @@ option_parser.add_option('--json', default=False, action='store_true',
   help="Output results in JSON form")
 option_parser.add_option('--pretty', default=False, action='store_true',
   help="Show human-readable timestamps instead of unix times")
+option_parser.add_option('--janus', default=False, action='store_true')
 
 (options, args) = option_parser.parse_args()
 
 if len(args) != 1:
   option_parser.print_help()
   sys.exit(1)
+
+if options.janus:
+    whisper.enableJanus()
 
 path = args[0]
 

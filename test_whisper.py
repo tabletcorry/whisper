@@ -5,7 +5,9 @@ import os
 import time
 import random
 import struct
+from profilestats import profile
 from janus import janus_create
+import janus
 
 try:
     import unittest2 as unittest
@@ -13,6 +15,8 @@ except ImportError:
     import unittest
 
 import whisper
+
+real_time = time
 
 
 class TestWhisper(unittest.TestCase):
@@ -269,6 +273,27 @@ class TestWhisper(unittest.TestCase):
 
         self._removedb()
 
+    def test_many_creates(self):
+        retention = [(1, 60), (60, 60)]
+        start_time = real_time.time()
+        for i in xrange(1000):
+            self._createdb(self.db, retention)
+            self._removedb()
+        end_time = real_time.time()
+        print "Create:", end_time - start_time
+
+    def test_many_fetches(self):
+        whisper.HEADER_CACHE = True
+        retention = [(1, 60), (60, 60)]
+        self._createdb(self.db, retention)
+        start_time = real_time.time()
+        for i in xrange(2500):
+            returned = whisper.fetch(self.db, whisper.Time.original_value-10)
+        end_time = real_time.time()
+        self._removedb()
+        print "Fetch:", end_time - start_time
+        whisper.HEADER_CACHE = True
+        whisper._headerCache = {}
 
     @classmethod
     def tearDownClass(cls):
@@ -299,6 +324,13 @@ class TestWhisperJanus(TestWhisper):
     def _createdb(cls, path, retentions):
         whisper.create(path, retentions)
         janus_create(path)
+
+    def test_many_fetches(self):
+        janus.CONFIG_CACHE = True
+        super(TestWhisperJanus, self).test_many_fetches()
+        janus.CONFIG_CACHE = False
+        janus._configCache = {}
+
 
     def test_update_single_autoflush(self):
         # TODO: Modify whisper to allow Janus to flush
