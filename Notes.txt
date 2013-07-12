@@ -1,0 +1,36 @@
+With Dict:
+600035 function calls in 0.613 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.199    0.199    0.325    0.325 /Users/chaines/github/whisper/whisper.py:686(__archive_update_many)
+        1    0.111    0.111    0.613    0.613 /Users/chaines/github/whisper/whisper.py:629(update_many)
+        1    0.089    0.089    0.426    0.426 /Users/chaines/github/whisper/whisper.py:647(file_update_many)
+        1    0.086    0.086    0.086    0.086 {method 'items' of 'dict' objects}
+        1    0.051    0.051    0.075    0.075 {method 'sort' of 'list' objects}
+   200000    0.038    0.000    0.038    0.000 {_struct.pack}
+
+No Dict:
+600029 function calls in 0.498 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.169    0.169    0.208    0.208 /Users/chaines/github/whisper/whisper.py:686(__archive_update_many)
+        1    0.114    0.114    0.498    0.498 /Users/chaines/github/whisper/whisper.py:629(update_many)
+        1    0.087    0.087    0.308    0.308 /Users/chaines/github/whisper/whisper.py:647(file_update_many)
+        1    0.052    0.052    0.076    0.076 {method 'sort' of 'list' objects}
+   200000    0.038    0.000    0.038    0.000 {_struct.pack}
+
+With head removal:
+600029 function calls in 0.503 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.177    0.177    0.215    0.215 /Users/chaines/github/whisper/whisper.py:686(__archive_update_many)
+        1    0.113    0.113    0.503    0.503 /Users/chaines/github/whisper/whisper.py:629(update_many)
+        1    0.087    0.087    0.315    0.315 /Users/chaines/github/whisper/whisper.py:647(file_update_many)
+        1    0.050    0.050    0.074    0.074 {method 'sort' of 'list' objects}
+   200000    0.038    0.000    0.038    0.000 {_struct.pack}
