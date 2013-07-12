@@ -210,6 +210,33 @@ class TestWhisper(unittest.TestCase):
 
         return data
 
+    def test_update_many_profiled(self):
+        wsp = self.db
+        schema = [(1, 20000)]
+        num_data_points = 20000
+
+        self._createdb(wsp, schema)
+
+        # test single update
+        data = []
+        for i in range(num_data_points):
+            timestamp = time.time()
+            value = 10
+            data.append((timestamp, value))
+            time.advance()
+
+
+        import cProfile, pstats, io
+        pr = cProfile.Profile()
+        pr.enable()
+        whisper.update_many(wsp, data)
+        pr.disable()
+        ps = pstats.Stats(pr)
+        ps.sort_stats('time')
+        ps.print_stats()
+
+        self._removedb()
+
     def test_update_many(self):
         retention_schema = [(1, 20)]
         data = self._update_many(schema=retention_schema)
