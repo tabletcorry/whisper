@@ -191,6 +191,47 @@ class TestWhisper(unittest.TestCase):
         #whisper.update_many(wsp, data[1:])
         return data
 
+    def _update_many(self, wsp=None, schema=None, num_data_points=None):
+        wsp = wsp or self.db
+        schema = schema or [(1, 20)]
+        num_data_points = num_data_points or 20
+
+        self._createdb(wsp, schema)
+
+        # test single update
+        data = []
+        for i in range(num_data_points):
+            timestamp = time.time()
+            value = random.random() * 10
+            data.append((timestamp, value))
+            time.advance()
+
+        whisper.update_many(wsp, data)
+
+        return data
+
+    def test_update_many(self):
+        retention_schema = [(1, 20)]
+        data = self._update_many(schema=retention_schema)
+        # fetch the data
+        fetch = whisper.fetch(self.db, 0)   # all data
+        fetch_data = fetch[1]
+
+        for i, (timestamp, value) in enumerate(data[1:]):
+            # is value in the fetched data?
+            self.assertEqual(value, fetch_data[i])
+
+        # check TimestampNotCovered
+        with self.assertRaises(whisper.TimestampNotCovered):
+            # in the future
+            whisper.update(self.db, 1.337, time.time() + 1)
+        with self.assertRaises(whisper.TimestampNotCovered):
+            # before the past
+            whisper.update(self.db, 1.337,
+                           time.time() - retention_schema[0][1] - 1)
+
+        self._removedb()
+
     def test_update_single_autoflush(self):
         whisper.setAutoFlush(True)
         self.test_update_single_archive()
@@ -276,7 +317,7 @@ class TestWhisper(unittest.TestCase):
     def test_many_creates(self):
         retention = [(1, 60), (60, 60)]
         start_time = real_time.time()
-        for i in xrange(1000):
+        for i in xrange(500):
             self._createdb(self.db, retention)
             self._removedb()
         end_time = real_time.time()
@@ -287,7 +328,7 @@ class TestWhisper(unittest.TestCase):
         retention = [(1, 60), (60, 60)]
         self._createdb(self.db, retention)
         start_time = real_time.time()
-        for i in xrange(2500):
+        for i in xrange(500):
             returned = whisper.fetch(self.db, whisper.Time.original_value-10)
         end_time = real_time.time()
         self._removedb()
